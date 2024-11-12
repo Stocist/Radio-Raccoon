@@ -7,12 +7,15 @@ module.exports = {
   permissions: "0x0000000000000800",
   options: [],
   run: async (client, interaction) => {
-    try {
+    try 
+    {
       const githubLink = "https://github.com/Stocist";
-
+      const embed = new EmbedBuilder()
+        .setColor("Blue")
+        .setDescription(`[${githubLink}](${githubLink})`);
       return interaction.reply({ embeds: [embed] });
     } catch (e) {
-    console.error(e); 
-  }
+      console.error(e);
+    }
   },
 };
