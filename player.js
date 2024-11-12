@@ -21,7 +21,12 @@ function initializePlayer(client) {
             if (guild) guild.shard.send(payload);
         },
         defaultSearchPlatform: "ytmsearch",
-        restVersion: "v3"
+        restVersion: "v3",
+        audioQuality: {
+            bitrate: 96000, // 96kbps, drop down if it starts to lag
+            sampleRate: 48000,
+            bufferSize: 1024
+        }
     });
 
     client.riffy.on("nodeConnect", node => {
