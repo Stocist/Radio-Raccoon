@@ -9,28 +9,27 @@ function isInSameVoiceChannel(interaction, player) {
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lavalink.devamop.in",
-            port: 443,
-            password: "DevamOP",
-            secure: true
-        },
-        // Backup nodes
-        {
-            host: "lava.link",
-            port: 80,
-            password: "anything",
-            secure: false
-        },
-        {
-            host: "node1.kartadharta.xyz",
-            port: 443,
-            password: "kdlavalink",
-            secure: true
-        },
-        {
-            host: "lavalink.lexnet.cc",
+            host: "eu-lavalink.lexnet.cc",
             port: 443,
             password: "lexn3tl@val!nk",
+            secure: true
+        },
+        {
+            host: "usw.lavalink.mitask.tech",
+            port: 443,
+            password: "youshallnotpass",
+            secure: true
+        },
+        {
+            host: "lavalink.oops.wtf",
+            port: 443,
+            password: "www.freelavalink.ga",
+            secure: true
+        },
+        {
+            host: "lavalink.devz.cloud",
+            port: 443,
+            password: "devz.cloud",
             secure: true
         }
     ];
