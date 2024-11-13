@@ -1,5 +1,5 @@
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
-const queue = require("../queue");
+const queue = require("./queue");
 
 async function play(client, interaction) {
     try {

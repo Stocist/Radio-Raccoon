@@ -1,6 +1,6 @@
 const { Riffy } = require("riffy");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const queue = require("./queue");
+const queue = require("./commands/queue");
 
 function isInSameVoiceChannel(interaction, player) {
     return interaction.member.voice.channelId === player.voiceChannel;
