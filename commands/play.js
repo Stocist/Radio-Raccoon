@@ -15,20 +15,28 @@ async function play(client, interaction) {
 
         let player = client.riffy.players.get(interaction.guild.id);
         if (!player) {
-            player = client.riffy.createPlayer({
-                guildId: interaction.guild.id,
-                voiceChannel: interaction.member.voice.channelId,
-                textChannel: interaction.channel.id,
-                selfDeaf: true,
-                selfMute: false
-            });
-            
-            await player.connect();
+            try {
+                player = client.riffy.createPlayer({
+                    guildId: interaction.guild.id,
+                    voiceChannel: interaction.member.voice.channel.id,
+                    textChannel: interaction.channel.id,
+                    selfDeaf: true,
+                    selfMute: false
+                });
+                
+                await player.connect();
+            } catch (error) {
+                console.error('Error creating player:', error);
+                return await interaction.editReply({
+                    content: "❌ Failed to create music player. Please try again.",
+                    ephemeral: true
+                });
+            }
         }
 
-        if (player && player.voiceChannel && interaction.member.voice.channelId !== player.voiceChannel) {
+        if (player.voiceChannel && interaction.member.voice.channelId !== player.voiceChannel) {
             return await interaction.editReply({ 
-                content: "❌ You must be in the same voice channel as the bot to add songs!", 
+                content: "❌ You must be in the same voice channel as the bot!", 
                 ephemeral: true 
             });
         }
@@ -36,23 +44,15 @@ async function play(client, interaction) {
         const query = interaction.options.getString('name');
 
         const resolve = await client.riffy.resolve({ query: query, requester: interaction.user });
-        console.log('Resolve response:', resolve);
-
-        if (!resolve || typeof resolve !== 'object') {
+        
+        if (!resolve || !resolve.tracks || !resolve.tracks.length) {
             return await interaction.editReply({ 
-                content: "❌ Could not resolve the query. Please try again.", 
+                content: "❌ No results found for your search.", 
                 ephemeral: true 
             });
         }
 
         const { loadType, tracks, playlistInfo } = resolve;
-
-        if (!Array.isArray(tracks)) {
-            return await interaction.editReply({ 
-                content: "❌ No tracks found. Please try again.", 
-                ephemeral: true 
-            });
-        }
 
         if (loadType === 'PLAYLIST_LOADED') {
             for (const track of tracks) {
@@ -61,7 +61,9 @@ async function play(client, interaction) {
                 queueNames.push(track.info.title);
             }
 
-            if (!player.playing && !player.paused) player.play();
+            if (!player.playing && !player.paused) {
+                player.play();
+            }
 
         } else if (loadType === 'SEARCH_RESULT' || loadType === 'TRACK_LOADED') {
             const track = tracks.shift();
@@ -70,7 +72,9 @@ async function play(client, interaction) {
             player.queue.add(track);
             queueNames.push(track.info.title);
 
-            if (!player.playing && !player.paused) player.play();
+            if (!player.playing && !player.paused) {
+                player.play();
+            }
         } else {
             const errorEmbed = new EmbedBuilder()
                 .setColor('#ff0000')
