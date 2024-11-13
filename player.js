@@ -9,11 +9,30 @@ function isInSameVoiceChannel(interaction, player) {
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lava-v3.ajieblogs.eu.org",
+            host: "lavalink.devamop.in",
             port: 443,
-            password: "https://dsc.gg/ajidevserver",
+            password: "DevamOP",
             secure: true
         },
+        // Backup nodes
+        {
+            host: "lava.link",
+            port: 80,
+            password: "anything",
+            secure: false
+        },
+        {
+            host: "node1.kartadharta.xyz",
+            port: 443,
+            password: "kdlavalink",
+            secure: true
+        },
+        {
+            host: "lavalink.lexnet.cc",
+            port: 443,
+            password: "lexn3tl@val!nk",
+            secure: true
+        }
     ];
 
     client.riffy = new Riffy(client, nodes, {

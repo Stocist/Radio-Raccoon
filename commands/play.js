@@ -11,7 +11,17 @@ async function play(client, interaction) {
             });
         }
 
-        const player = client.riffy.players.get(interaction.guildId);
+        let player = client.riffy.players.get(interaction.guildId);
+        if (!player) {
+            player = client.riffy.createPlayer({
+                guildId: interaction.guildId,
+                voiceChannel: interaction.member.voice.channelId,
+                textChannel: interaction.channelId,
+                selfDeaf: true,
+                selfMute: false
+            });
+        }
+
         if (player && player.voiceChannel && interaction.member.voice.channelId !== player.voiceChannel) {
             return await interaction.reply({ 
                 content: "❌ You must be in the same voice channel as the bot to add songs!", 
