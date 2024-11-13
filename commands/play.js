@@ -1,6 +1,5 @@
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
-
-const queueNames = [];
+const queue = require("../queue");
 
 async function play(client, interaction) {
     try {
@@ -70,7 +69,7 @@ async function play(client, interaction) {
             for (const track of tracks) {
                 track.info.requester = interaction.user;
                 player.queue.add(track);
-                queueNames.push(track.info.title);
+                queue.addToQueue(player.guildId, track.info.title);
             }
 
             if (!player.playing && !player.paused) {
@@ -82,7 +81,7 @@ async function play(client, interaction) {
             track.info.requester = interaction.user;
 
             player.queue.add(track);
-            queueNames.push(track.info.title);
+            queue.addToQueue(player.guildId, track.info.title);
 
             if (!player.playing && !player.paused) {
                 player.play();
@@ -149,7 +148,7 @@ async function play(client, interaction) {
 
 module.exports = {
     name: "play",
-    description: "Add options too",
+    description: "Add songs to the queue",
     permissions: "0x0000000000000800",
     options: [{
         name: 'name',
@@ -157,6 +156,5 @@ module.exports = {
         type: ApplicationCommandOptionType.String,
         required: true
     }],
-    run: play,
-    queueNames: queueNames
+    run: play
 };

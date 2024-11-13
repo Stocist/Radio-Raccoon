@@ -1,6 +1,6 @@
 const { Riffy } = require("riffy");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { queueNames } = require("./commands/play");
+const queue = require("./queue");
 
 function isInSameVoiceChannel(interaction, player) {
     return interaction.member.voice.channelId === player.voiceChannel;
@@ -151,14 +151,14 @@ function initializePlayer(client) {
     
                     const pageSize = 10;
     
-                    const queueMessage = queueNames.length > 0 ?
-                        queueNames.map((song, index) => `${index + 1}. ${song}`).join('\n') :
+                    const queueMessage = queue.getQueue(player.guildId).length > 0 ?
+                        queue.getQueue(player.guildId).map((song, index) => `${index + 1}. ${song}`).join('\n') :
                         "The queue is empty.";
     
     
                     const pages = [];
-                    for (let i = 0; i < queueNames.length; i += pageSize) {
-                        const page = queueNames.slice(i, i + pageSize);
+                    for (let i = 0; i < queue.getQueue(player.guildId).length; i += pageSize) {
+                        const page = queue.getQueue(player.guildId).slice(i, i + pageSize);
                         pages.push(page);
                     }
     
@@ -174,7 +174,7 @@ function initializePlayer(client) {
                     }
     
                 } else if (i.customId === 'clearQueue') {
-                    clearQueue(player);
+                    queue.clearQueue(player.guildId);
                     const queueEmbed = new EmbedBuilder()
                         .setColor("#0099ff")
                         .setAuthor({
@@ -207,6 +207,8 @@ function initializePlayer(client) {
     
                 await channel.send({ embeds: [queueEmbed] });
             }
+    
+            queue.clearQueue(player.guildId);
         });
     
     
@@ -221,7 +223,7 @@ function initializePlayer(client) {
     
         function clearQueue(player) {
             player.queue.clear();
-            queueNames.length = 0;
+            queue.clearQueue(player.guildId);
         }
     
     
