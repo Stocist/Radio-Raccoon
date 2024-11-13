@@ -6,6 +6,10 @@ async function play(client, interaction) {
     try {
         await interaction.deferReply();
 
+        console.log('Guild ID:', interaction.guildId);
+        console.log('Voice Channel ID:', interaction.member.voice.channelId);
+        console.log('Text Channel ID:', interaction.channelId);
+
         if (!interaction.member.voice.channelId) {
             return await interaction.editReply({ 
                 content: "❌ You must be in a voice channel to use this command!", 
@@ -13,20 +17,28 @@ async function play(client, interaction) {
             });
         }
 
-        let player = client.riffy.players.get(interaction.guild.id);
+        let player = client.riffy.players.get(interaction.guildId);
         if (!player) {
             try {
-                player = client.riffy.createPlayer({
-                    guildId: interaction.guild.id,
-                    voiceChannel: interaction.member.voice.channel.id,
-                    textChannel: interaction.channel.id,
+                const playerOptions = {
+                    guildId: interaction.guildId,
+                    voiceChannel: interaction.member.voice.channelId,
+                    textChannel: interaction.channelId,
                     selfDeaf: true,
                     selfMute: false
-                });
-                
+                };
+
+                console.log('Creating player with options:', playerOptions);
+
+                player = client.riffy.createPlayer(playerOptions);
+
+                if (!player) {
+                    throw new Error('Failed to create player object');
+                }
+
                 await player.connect();
             } catch (error) {
-                console.error('Error creating player:', error);
+                console.error('Detailed error creating player:', error);
                 return await interaction.editReply({
                     content: "❌ Failed to create music player. Please try again.",
                     ephemeral: true
@@ -120,7 +132,7 @@ async function play(client, interaction) {
         await interaction.followUp({ embeds: [embeds[randomIndex]] });
 
     } catch (error) {
-        console.error('Error processing play command:', error);
+        console.error('Error in play command:', error);
         if (interaction.deferred) {
             await interaction.editReply({ 
                 content: "❌ An error occurred while processing your request.", 
