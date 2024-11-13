@@ -4,26 +4,30 @@ const queueNames = [];
 
 async function play(client, interaction) {
     try {
+        await interaction.deferReply();
+
         if (!interaction.member.voice.channelId) {
-            return await interaction.reply({ 
+            return await interaction.editReply({ 
                 content: "❌ You must be in a voice channel to use this command!", 
                 ephemeral: true 
             });
         }
 
-        let player = client.riffy.players.get(interaction.guildId);
+        let player = client.riffy.players.get(interaction.guild.id);
         if (!player) {
             player = client.riffy.createPlayer({
-                guildId: interaction.guildId,
+                guildId: interaction.guild.id,
                 voiceChannel: interaction.member.voice.channelId,
-                textChannel: interaction.channelId,
+                textChannel: interaction.channel.id,
                 selfDeaf: true,
                 selfMute: false
             });
+            
+            await player.connect();
         }
 
         if (player && player.voiceChannel && interaction.member.voice.channelId !== player.voiceChannel) {
-            return await interaction.reply({ 
+            return await interaction.editReply({ 
                 content: "❌ You must be in the same voice channel as the bot to add songs!", 
                 ephemeral: true 
             });
@@ -31,22 +35,23 @@ async function play(client, interaction) {
 
         const query = interaction.options.getString('name');
 
-        await interaction.deferReply();
-
-        // Try resolving the query and log the entire response for debugging
         const resolve = await client.riffy.resolve({ query: query, requester: interaction.user });
         console.log('Resolve response:', resolve);
 
-        // Ensure the response structure is as expected
         if (!resolve || typeof resolve !== 'object') {
-            throw new TypeError('Resolve response is not an object');
+            return await interaction.editReply({ 
+                content: "❌ Could not resolve the query. Please try again.", 
+                ephemeral: true 
+            });
         }
 
         const { loadType, tracks, playlistInfo } = resolve;
 
         if (!Array.isArray(tracks)) {
-            console.error('Expected tracks to be an array:', tracks);
-            throw new TypeError('Expected tracks to be an array');
+            return await interaction.editReply({ 
+                content: "❌ No tracks found. Please try again.", 
+                ephemeral: true 
+            });
         }
 
         if (loadType === 'PLAYLIST_LOADED') {
@@ -112,12 +117,17 @@ async function play(client, interaction) {
 
     } catch (error) {
         console.error('Error processing play command:', error);
-        const errorEmbed = new EmbedBuilder()
-            .setColor('#ff0000')
-            .setTitle('Error')
-            .setDescription('An error occurred while processing your request.');
-
-        await interaction.editReply({ embeds: [errorEmbed] });
+        if (interaction.deferred) {
+            await interaction.editReply({ 
+                content: "❌ An error occurred while processing your request.", 
+                ephemeral: true 
+            });
+        } else {
+            await interaction.reply({ 
+                content: "❌ An error occurred while processing your request.", 
+                ephemeral: true 
+            });
+        }
     }
 }
 
