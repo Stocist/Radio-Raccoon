@@ -2,6 +2,10 @@ const { Riffy } = require("riffy");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { queueNames } = require("./commands/play");
 
+function isInSameVoiceChannel(interaction, player) {
+    return interaction.member.voice.channelId === player.voiceChannel;
+}
+
 function initializePlayer(client) {
     const nodes = [
         {
@@ -100,6 +104,14 @@ function initializePlayer(client) {
                 .catch(console.error);
         }, 180000);
         collector.on('collect', async i => {
+            if (!isInSameVoiceChannel(i, player)) {
+                await i.reply({ 
+                    content: "❌ You must be in the same voice channel as the bot to use these controls!", 
+                    ephemeral: true 
+                });
+                return;
+            }
+
             await i.deferUpdate();
             if (i.customId === 'loopQueue') {
                 setLoop(player, 'queue');

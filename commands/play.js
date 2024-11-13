@@ -4,14 +4,22 @@ const queueNames = [];
 
 async function play(client, interaction) {
     try {
-        const query = interaction.options.getString('name');
+        if (!interaction.member.voice.channelId) {
+            return await interaction.reply({ 
+                content: "❌ You must be in a voice channel to use this command!", 
+                ephemeral: true 
+            });
+        }
 
-        const player = client.riffy.createConnection({
-            guildId: interaction.guildId,
-            voiceChannel: interaction.member.voice.channelId,
-            textChannel: interaction.channelId,
-            deaf: true
-        });
+        const player = client.riffy.players.get(interaction.guildId);
+        if (player && player.voiceChannel && interaction.member.voice.channelId !== player.voiceChannel) {
+            return await interaction.reply({ 
+                content: "❌ You must be in the same voice channel as the bot to add songs!", 
+                ephemeral: true 
+            });
+        }
+
+        const query = interaction.options.getString('name');
 
         await interaction.deferReply();
 
