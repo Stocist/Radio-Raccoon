@@ -1,4 +1,3 @@
-
 const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
@@ -9,9 +8,16 @@ module.exports = {
     try {
       const githubLink = "https://github.com/Stocist";
 
+      const embed = new EmbedBuilder()
+        .setColor('#00ff00')
+        .setTitle('Support')
+        .setDescription(`For support, visit our GitHub repository: [GitHub Link](${githubLink})`)
+        .setFooter({ text: 'Thank you for using Radio Raccoon!' });
+
       return interaction.reply({ embeds: [embed] });
     } catch (e) {
-    console.error(e); 
-  }
+      console.error(e); 
+      return interaction.reply({ content: "❌ An error occurred while processing your request.", ephemeral: true });
+    }
   },
 };

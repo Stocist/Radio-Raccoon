@@ -235,9 +235,7 @@ function initializePlayer(client) {
                 .setDescription(queueList);
             channel.send({ embeds: [queueEmbed] });
         }
-    
-        module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
     }
     
-    module.exports = { initializePlayer };
+module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
     
