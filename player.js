@@ -5,17 +5,18 @@ const { queueNames } = require("./commands/play");
 function initializePlayer(client) {
     const nodes = [
         {
-            Host : "lava-v4.ajieblogs.eu.org",
-            Port : 443,
-            Password : "https://dsc.gg/ajidevserver",
-            Secure : true 
+            name: "node_1",
+            host: "lava-v4.ajieblogs.eu.org",
+            port: 443,
+            password: "https://dsc.gg/ajidevserver",
+            secure: true 
         },
-        // Backup node
         {
-            Host : "lavalinkv4.serenetia.com",
-            Port : 443,
-            Password : "https://dsc.gg/ajidevserver",
-            secure : true
+            name: "node_2",
+            host: "lavalinkv4.serenetia.com",
+            port: 443,
+            password: "https://dsc.gg/ajidevserver",
+            secure: true
         }
     ];
 
@@ -28,9 +29,9 @@ function initializePlayer(client) {
             if (guild) guild.shard.send(payload);
         },
         defaultSearchPlatform: "ytmsearch",
-        restVersion: "v3",
+        restVersion: "v4",
         audioQuality: {
-            bitrate: 96000, // 96kbps, drop down if it starts to lag
+            bitrate: 96000,
             sampleRate: 48000,
             bufferSize: 1024
         }
