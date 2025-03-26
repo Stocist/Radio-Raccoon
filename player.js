@@ -14,7 +14,8 @@ function initializePlayer(client) {
         {
             Host : "lavalinkv4.serenetia.com",
             Port : 443,
-            Password : "https://dsc.gg/ajidevserver"
+            Password : "https://dsc.gg/ajidevserver",
+            secure : true
         }
     ];
 
