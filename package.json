@@ -8,7 +8,8 @@
     "dotenv": "^16.4.5",
     "erela.js": "^2.4.0",
     "express": "^4.19.2",
-    "riffy": "^1.0.3"
+    "riffy": "^1.0.3",
+    "ws": "^8.18.1"
   },
   "scripts": {
     "start": "node index.js"

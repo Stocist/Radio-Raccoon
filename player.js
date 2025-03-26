@@ -5,11 +5,18 @@ const { queueNames } = require("./commands/play");
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lava-v3.ajieblogs.eu.org",
+            host: "lavalink-1.is-it.pink",
             port: 443,
-            password: "https://dsc.gg/ajidevserver",
+            password: "https://disutils.com",
             secure: true
         },
+        // Backup node
+        {
+            host: "lavalink.nextgencoders.xyz",
+            port: 443,
+            password: "nextgencoders",
+            secure: true
+        }
     ];
 
     client.riffy = new Riffy(client, nodes, {
