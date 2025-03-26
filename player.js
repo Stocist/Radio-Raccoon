@@ -5,17 +5,16 @@ const { queueNames } = require("./commands/play");
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lavalink-1.is-it.pink",
-            port: 443,
-            password: "https://disutils.com",
-            secure: true
+            Host : "lava-v4.ajieblogs.eu.org",
+            Port : 443,
+            Password : "https://dsc.gg/ajidevserver",
+            Secure : true 
         },
         // Backup node
         {
-            host: "lavalink.nextgencoders.xyz",
-            port: 443,
-            password: "nextgencoders",
-            secure: true
+            Host : "lavalinkv4.serenetia.com",
+            Port : 443,
+            Password : "https://dsc.gg/ajidevserver"
         }
     ];
 
