@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: .
+    image: radio-raccoon
+    environment:
+      TOKEN: ${TOKEN}
+    restart: unless-stopped

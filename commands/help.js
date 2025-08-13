@@ -13,11 +13,17 @@ module.exports = {
 
       const embed = new EmbedBuilder()
          .setColor('#0099ff')
-      .setTitle('💎 Prime Music Bot')
-      .setDescription('Welcome to the Music Bot!\n\n- Here are the available commands:\n\n' +
-        '**/play :** Start playing the songs.\n' +
-        '**/ping :** check bot latency.\n' +
-        '**/support :** Display support server info');
+      .setTitle('🦝 Radio Raccoon')
+      .setDescription('Commands:\n' +
+        '**/play query:** — Play (native).\n' +
+        '**/pause** — Pause.\n' +
+        '**/resume** — Resume.\n' +
+        '**/skip** — Skip to next in queue.\n' +
+        '**/clear** — Clear queue.\n' +
+        '**/queue** — Show queue.\n' +
+        '**/stop** — Stop and clear queue.\n' +
+        '**/ping** — Bot latency.\n' +
+        '**/support** — Support/GitHub.');
 
       return interaction.reply({ embeds: [embed] });
     } catch (e) {

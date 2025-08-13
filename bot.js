@@ -3,7 +3,8 @@ const config = require("./config.js");
 const fs = require("fs");
 const path = require('path');
 const { printWatermark } = require('./util/pw');
-const { initializePlayer } = require('./player');
+const { initializeAudio } = require('./src/audio');
+const nativeAudioConfig = require('./src/config/audio');
 
 const client = new Client({
     intents: Object.keys(GatewayIntentBits).map((a) => {
@@ -12,11 +13,10 @@ const client = new Client({
 });
 
 client.config = config;
-initializePlayer(client);
+initializeAudio(client, nativeAudioConfig);
 
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.riffy.init(client.user.id);
 });
 
 client.config = config;
@@ -50,11 +50,7 @@ fs.readdir(config.commandsDir, (err, files) => {
   });
 });
 
-client.on("raw", (d) => {
-    const { GatewayDispatchEvents } = require("discord.js");
-    if (![GatewayDispatchEvents.VoiceStateUpdate, GatewayDispatchEvents.VoiceServerUpdate].includes(d.t)) return;
-    client.riffy.updateVoiceState(d);
-});
+
 
 client.login(config.TOKEN || process.env.TOKEN).catch((e) => {
     console.log('TOKEN ERROR❌  - Turn On Intents or Reset New Token');
