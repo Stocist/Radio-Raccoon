@@ -1,4 +1,5 @@
 const playdl = require('play-dl');
+const { spawnSync } = require('child_process');
 let spotifyInfo;
 try {
   // Use global fetch (Node >=18). Fallback will be handled by package if needed.
@@ -56,8 +57,14 @@ class TrackResolver {
         source: 'youtube'
       };
     } catch (error) {
-      console.error('Failed to resolve YouTube track:', error.message);
-      throw error;
+      // Fallback to yt-dlp JSON when play-dl is blocked or fails
+      try {
+        const json = this._ytDlpJson(['-J', url]);
+        return this._mapYtDlpEntryToTrack(json);
+      } catch (e) {
+        console.error('Failed to resolve YouTube track:', error.message);
+        throw error;
+      }
     }
   }
 
@@ -76,8 +83,17 @@ class TrackResolver {
       }));
       return tracks;
     } catch (error) {
-      console.error('Failed to resolve YouTube playlist:', error.message);
-      throw error;
+      // Fallback to yt-dlp JSON
+      try {
+        const json = this._ytDlpJson(['-J', url]);
+        const entries = Array.isArray(json?.entries) ? json.entries : [];
+        // Cap to first 100 to avoid very large playlists
+        const limited = entries.slice(0, 100);
+        return limited.map((e) => this._mapYtDlpEntryToTrack(e)).filter(Boolean);
+      } catch (e) {
+        console.error('Failed to resolve YouTube playlist:', error.message);
+        throw error;
+      }
     }
   }
 
@@ -125,17 +141,57 @@ class TrackResolver {
       if (!url) throw new Error('Search result missing URL');
       return await this.resolveYouTube(url);
     } catch (error) {
-      console.error('Failed to search YouTube:', error.message);
-      throw error;
+      // Fallback to yt-dlp search
+      try {
+        const json = this._ytDlpJson(['-J', `ytsearch1:${query}`]);
+        const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
+        if (!entry) throw new Error('No results found');
+        const track = this._mapYtDlpEntryToTrack(entry);
+        if (!track?.url) throw new Error('Search result missing URL');
+        return track;
+      } catch (e) {
+        console.error('Failed to search YouTube:', error.message);
+        throw error;
+      }
     }
   }
 
   async searchYouTubeAsTrack(query) {
-    const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-    if (!res || res.length === 0) throw new Error('No results found');
-    const url = res[0].url || (res[0].id ? `https://www.youtube.com/watch?v=${res[0].id}` : undefined);
-    if (!url) throw new Error('Search result missing URL');
-    return await this.resolveYouTube(url);
+    try {
+      const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
+      if (!res || res.length === 0) throw new Error('No results found');
+      const url = res[0].url || (res[0].id ? `https://www.youtube.com/watch?v=${res[0].id}` : undefined);
+      if (!url) throw new Error('Search result missing URL');
+      return await this.resolveYouTube(url);
+    } catch {
+      const json = this._ytDlpJson(['-J', `ytsearch1:${query}`]);
+      const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
+      if (!entry) throw new Error('No results found');
+      return this._mapYtDlpEntryToTrack(entry);
+    }
+  }
+
+  _ytDlpJson(args) {
+    const result = spawnSync('yt-dlp', args, { encoding: 'utf8' });
+    if (result.status !== 0) {
+      throw new Error(result.stderr?.trim() || 'yt-dlp failed');
+    }
+    const text = result.stdout?.trim();
+    if (!text) throw new Error('yt-dlp produced no output');
+    return JSON.parse(text);
+  }
+
+  _mapYtDlpEntryToTrack(entry) {
+    if (!entry) return null;
+    const id = entry.id;
+    const title = entry.title;
+    const artist = entry.uploader || entry.channel || '';
+    const duration = Math.floor(entry.duration || 0);
+    const url = entry.webpage_url || (id ? `https://www.youtube.com/watch?v=${id}` : undefined);
+    const thumbnail = Array.isArray(entry.thumbnails) && entry.thumbnails.length > 0
+      ? entry.thumbnails[0].url || entry.thumbnails[0]
+      : entry.thumbnail || null;
+    return { id, title, artist, duration, url, thumbnail, source: 'youtube' };
   }
 }
 
