@@ -5,4 +5,5 @@ services:
     environment:
       TOKEN: ${TOKEN}
       GUILD_ID: ${GUILD_ID}
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE}
     restart: unless-stopped

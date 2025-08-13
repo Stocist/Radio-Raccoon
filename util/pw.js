@@ -1,6 +1,6 @@
 const status = "AUTOMATIC";
 const botName = "Radio Raccoon";
-const Text = "LavaLink";
+const Text = "Native Audio";
 const version = "Latest@ v1.0"; 
 const startTime = Date.now();
 

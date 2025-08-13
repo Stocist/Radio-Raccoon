@@ -184,7 +184,9 @@ class TrackResolver {
   }
 
   _ytDlpJson(args) {
-    const result = spawnSync('yt-dlp', args, { encoding: 'utf8' });
+    const cookiesFile = process.env.YTDLP_COOKIES_FILE;
+    const finalArgs = cookiesFile ? ['--cookies', cookiesFile, ...args] : args;
+    const result = spawnSync('yt-dlp', finalArgs, { encoding: 'utf8' });
     if (result.status !== 0) {
       throw new Error(result.stderr?.trim() || 'yt-dlp failed');
     }
