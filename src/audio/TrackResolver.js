@@ -44,55 +44,58 @@ class TrackResolver {
   }
 
   async resolveYouTube(url) {
+    // yt-dlp first (most reliable)
     try {
-      const video = await playdl.video_info(url);
-      const details = video?.video_details;
-      return {
-        id: details?.id,
-        title: details?.title,
-        artist: details?.channel?.name,
-        duration: Math.floor(details?.durationInSec || 0),
-        url: details?.url || url,
-        thumbnail: details?.thumbnails?.[0]?.url,
-        source: 'youtube'
-      };
-    } catch (error) {
-      // Fallback to yt-dlp JSON when play-dl is blocked or fails
+      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', '--no-playlist', url]);
+      return this._mapYtDlpEntryToTrack(json);
+    } catch (e1) {
+      // Fallback to play-dl
       try {
-        const json = this._ytDlpJson(['-J', url]);
-        return this._mapYtDlpEntryToTrack(json);
-      } catch (e) {
-        console.error('Failed to resolve YouTube track:', error.message);
-        throw error;
+        const video = await playdl.video_info(url);
+        const details = video?.video_details;
+        return {
+          id: details?.id,
+          title: details?.title,
+          artist: details?.channel?.name,
+          duration: Math.floor(details?.durationInSec || 0),
+          url: details?.url || url,
+          thumbnail: details?.thumbnails?.[0]?.url,
+          source: 'youtube'
+        };
+      } catch (e2) {
+        console.error('Failed to resolve YouTube track via yt-dlp:', e1?.message || e1);
+        console.error('Failed to resolve YouTube track via play-dl:', e2?.message || e2);
+        throw e2;
       }
     }
   }
 
   async resolveYouTubePlaylist(url) {
+    // yt-dlp first
     try {
-      const pl = await playdl.playlist_info(url, { incomplete: true });
-      const videos = typeof pl.all_videos === 'function' ? await pl.all_videos() : (pl.videos || []);
-      const tracks = videos.map((v) => ({
-        id: v.id,
-        title: v.title,
-        artist: v.channel?.name,
-        duration: Math.floor(v.durationInSec || 0),
-        url: v.url,
-        thumbnail: v.thumbnails?.[0]?.url,
-        source: 'youtube'
-      }));
-      return tracks;
-    } catch (error) {
-      // Fallback to yt-dlp JSON
+      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', url]);
+      const entries = Array.isArray(json?.entries) ? json.entries : [];
+      const limited = entries.slice(0, 100);
+      return limited.map((e) => this._mapYtDlpEntryToTrack(e)).filter(Boolean);
+    } catch (e1) {
+      // Fallback to play-dl
       try {
-        const json = this._ytDlpJson(['-J', url]);
-        const entries = Array.isArray(json?.entries) ? json.entries : [];
-        // Cap to first 100 to avoid very large playlists
-        const limited = entries.slice(0, 100);
-        return limited.map((e) => this._mapYtDlpEntryToTrack(e)).filter(Boolean);
-      } catch (e) {
-        console.error('Failed to resolve YouTube playlist:', error.message);
-        throw error;
+        const pl = await playdl.playlist_info(url, { incomplete: true });
+        const videos = typeof pl.all_videos === 'function' ? await pl.all_videos() : (pl.videos || []);
+        const tracks = videos.map((v) => ({
+          id: v.id,
+          title: v.title,
+          artist: v.channel?.name,
+          duration: Math.floor(v.durationInSec || 0),
+          url: v.url,
+          thumbnail: v.thumbnails?.[0]?.url,
+          source: 'youtube'
+        }));
+        return tracks;
+      } catch (e2) {
+        console.error('Failed to resolve YT playlist via yt-dlp:', e1?.message || e1);
+        console.error('Failed to resolve YT playlist via play-dl:', e2?.message || e2);
+        throw e2;
       }
     }
   }
@@ -133,41 +136,50 @@ class TrackResolver {
   }
 
   async searchYouTube(query) {
+    // yt-dlp first
     try {
-      const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-      if (!res || res.length === 0) throw new Error('No results found');
-      const candidate = res[0];
-      const url = candidate?.url || (candidate?.id ? `https://www.youtube.com/watch?v=${candidate.id}` : undefined);
-      if (!url) throw new Error('Search result missing URL');
-      return await this.resolveYouTube(url);
-    } catch (error) {
-      // Fallback to yt-dlp search
+      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
+      const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
+      if (!entry) throw new Error('No results found');
+      const track = this._mapYtDlpEntryToTrack(entry);
+      if (!track?.url) throw new Error('Search result missing URL');
+      return track;
+    } catch (e1) {
+      // Fallback to play-dl
       try {
-        const json = this._ytDlpJson(['-J', `ytsearch1:${query}`]);
-        const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
-        if (!entry) throw new Error('No results found');
-        const track = this._mapYtDlpEntryToTrack(entry);
-        if (!track?.url) throw new Error('Search result missing URL');
-        return track;
-      } catch (e) {
-        console.error('Failed to search YouTube:', error.message);
-        throw error;
+        const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
+        if (!res || res.length === 0) throw new Error('No results found');
+        const candidate = res[0];
+        const url = candidate?.url || (candidate?.id ? `https://www.youtube.com/watch?v=${candidate.id}` : undefined);
+        if (!url) throw new Error('Search result missing URL');
+        return await this.resolveYouTube(url);
+      } catch (e2) {
+        console.error('Failed to search YouTube via yt-dlp:', e1?.message || e1);
+        console.error('Failed to search YouTube via play-dl:', e2?.message || e2);
+        throw e2;
       }
     }
   }
 
   async searchYouTubeAsTrack(query) {
+    // yt-dlp first
     try {
-      const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-      if (!res || res.length === 0) throw new Error('No results found');
-      const url = res[0].url || (res[0].id ? `https://www.youtube.com/watch?v=${res[0].id}` : undefined);
-      if (!url) throw new Error('Search result missing URL');
-      return await this.resolveYouTube(url);
-    } catch {
-      const json = this._ytDlpJson(['-J', `ytsearch1:${query}`]);
+      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
       const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
       if (!entry) throw new Error('No results found');
       return this._mapYtDlpEntryToTrack(entry);
+    } catch (e1) {
+      try {
+        const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
+        if (!res || res.length === 0) throw new Error('No results found');
+        const url = res[0].url || (res[0].id ? `https://www.youtube.com/watch?v=${res[0].id}` : undefined);
+        if (!url) throw new Error('Search result missing URL');
+        return await this.resolveYouTube(url);
+      } catch (e2) {
+        console.error('Failed to search track via yt-dlp:', e1?.message || e1);
+        console.error('Failed to search track via play-dl:', e2?.message || e2);
+        throw e2;
+      }
     }
   }
 

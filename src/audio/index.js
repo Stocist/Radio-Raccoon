@@ -88,7 +88,7 @@ function initializeAudio(client, options = {}) {
       player.subscribe(connection);
       players.set(guildId, player.player);
 
-      // Create a high quality audio stream via play-dl
+      // Stream audio: yt-dlp first, play-dl fallback
       const isValidHttpUrl = (value) => {
         try {
           const u = new URL(value);
@@ -106,19 +106,19 @@ function initializeAudio(client, options = {}) {
         throw new Error("Resolved track has no valid URL");
       }
 
-      // Resolve video info and stream from it (more robust than passing URL directly)
+      // Try yt-dlp piping into ffmpeg via stdin (most resilient)
       try {
-        const info = await playdl.video_info(urlToStream);
-        const { stream } = await playdl.stream_from_info(info, { quality: 2 });
-        const opusStream = encoder.createOpusStream(stream);
-        player.play(opusStream);
-        current.set(guildId, track);
-      } catch (err) {
-        // Fallback to yt-dlp piping into ffmpeg via stdin
-        const subprocess = spawn("yt-dlp", ["-o", "-", "-f", "bestaudio/best", "-r", "1M", urlToStream], {
+        const subprocess = spawn("yt-dlp", ["-o", "-", "-f", "bestaudio/best", "-r", "2M", urlToStream], {
           stdio: ["ignore", "pipe", "ignore"]
         });
         const opusStream = encoder.createOpusStream(subprocess.stdout);
+        player.play(opusStream);
+        current.set(guildId, track);
+      } catch (e1) {
+        // Fallback to play-dl
+        const info = await playdl.video_info(urlToStream);
+        const { stream } = await playdl.stream_from_info(info, { quality: 2 });
+        const opusStream = encoder.createOpusStream(stream);
         player.play(opusStream);
         current.set(guildId, track);
       }
