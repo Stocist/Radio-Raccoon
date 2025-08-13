@@ -4,4 +4,5 @@ services:
     image: radio-raccoon
     environment:
       TOKEN: ${TOKEN}
+      GUILD_ID: ${GUILD_ID}
     restart: unless-stopped
