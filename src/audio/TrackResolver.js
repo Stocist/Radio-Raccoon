@@ -185,10 +185,16 @@ class TrackResolver {
 
   _ytDlpJson(args) {
     const cookiesFile = process.env.YTDLP_COOKIES_FILE;
-    const finalArgs = cookiesFile ? ['--cookies', cookiesFile, ...args] : args;
-    const result = spawnSync('yt-dlp', finalArgs, { encoding: 'utf8' });
+    const base = cookiesFile ? ['--cookies', cookiesFile] : [];
+    const run = (extra = []) => spawnSync('yt-dlp', [...base, ...extra, ...args], { encoding: 'utf8' });
+
+    let result = run();
     if (result.status !== 0) {
-      throw new Error(result.stderr?.trim() || 'yt-dlp failed');
+      // Retry with Android client extractor as a fallback
+      result = run(['--extractor-args', 'youtube:player_client=android']);
+      if (result.status !== 0) {
+        throw new Error(result.stderr?.trim() || 'yt-dlp failed');
+      }
     }
     const text = result.stdout?.trim();
     if (!text) throw new Error('yt-dlp produced no output');
