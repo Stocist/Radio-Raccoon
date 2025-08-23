@@ -1,5 +1,5 @@
 const playdl = require('play-dl');
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 let spotifyInfo;
 try {
   // Use global fetch (Node >=18). Fallback will be handled by package if needed.
@@ -46,7 +46,7 @@ class TrackResolver {
   async resolveYouTube(url) {
     // yt-dlp first (most reliable)
     try {
-      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', '--no-playlist', url]);
+      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', '--no-playlist', url]);
       return this._mapYtDlpEntryToTrack(json);
     } catch (e1) {
       // Fallback to play-dl
@@ -73,16 +73,18 @@ class TrackResolver {
   async resolveYouTubePlaylist(url) {
     // yt-dlp first
     try {
-      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', url]);
+      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', url]);
       const entries = Array.isArray(json?.entries) ? json.entries : [];
-      const limited = entries.slice(0, 100);
+      const limit = Number.parseInt(process.env.PLAYLIST_MAX || '100', 10);
+      const limited = entries.slice(0, limit);
       return limited.map((e) => this._mapYtDlpEntryToTrack(e)).filter(Boolean);
     } catch (e1) {
       // Fallback to play-dl
       try {
         const pl = await playdl.playlist_info(url, { incomplete: true });
         const videos = typeof pl.all_videos === 'function' ? await pl.all_videos() : (pl.videos || []);
-        const tracks = videos.map((v) => ({
+        const limit = Number.parseInt(process.env.PLAYLIST_MAX || '100', 10);
+        const tracks = videos.slice(0, limit).map((v) => ({
           id: v.id,
           title: v.title,
           artist: v.channel?.name,
@@ -115,18 +117,21 @@ class TrackResolver {
       }
       if (data?.type === 'album' || data?.type === 'playlist') {
         const tracks = await getTracks(url);
-        const limited = tracks.slice(0, 100);
-        const results = [];
-        for (const t of limited) {
+        const limit = Number.parseInt(process.env.PLAYLIST_MAX || '100', 10);
+        const concurrency = Math.max(1, Number.parseInt(process.env.SPOTIFY_CONCURRENCY || '4', 10));
+        const limited = tracks.slice(0, limit);
+        const mapper = async (t) => {
           const name = t.name || t.title;
           const artist = (Array.isArray(t.artists) ? t.artists[0]?.name : t.artist) || '';
           const q = `${name} ${artist}`.trim();
           try {
-            const track = await this.searchYouTubeAsTrack(q);
-            if (track) results.push(track);
-          } catch {}
-        }
-        return results;
+            return await this.searchYouTubeAsTrack(q);
+          } catch {
+            return null;
+          }
+        };
+        const mapped = await this._mapWithConcurrency(limited, concurrency, mapper);
+        return mapped.filter(Boolean);
       }
       throw new Error('Unsupported Spotify URL');
     } catch (error) {
@@ -138,7 +143,7 @@ class TrackResolver {
   async searchYouTube(query) {
     // yt-dlp first
     try {
-      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
+      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
       const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
       if (!entry) throw new Error('No results found');
       const track = this._mapYtDlpEntryToTrack(entry);
@@ -164,7 +169,7 @@ class TrackResolver {
   async searchYouTubeAsTrack(query) {
     // yt-dlp first
     try {
-      const json = this._ytDlpJson(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
+      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
       const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
       if (!entry) throw new Error('No results found');
       return this._mapYtDlpEntryToTrack(entry);
@@ -183,22 +188,72 @@ class TrackResolver {
     }
   }
 
-  _ytDlpJson(args) {
+  _ytDlpJsonAsync(args, { timeoutMs } = {}) {
     const cookiesFile = process.env.YTDLP_COOKIES_FILE;
     const base = cookiesFile ? ['--cookies', cookiesFile] : [];
-    const run = (extra = []) => spawnSync('yt-dlp', [...base, ...extra, ...args], { encoding: 'utf8' });
+    const effectiveTimeout = Number.parseInt(timeoutMs || process.env.YTDLP_TIMEOUT_MS || '15000', 10);
 
-    let result = run();
-    if (result.status !== 0) {
-      // Retry with Android client extractor as a fallback
-      result = run(['--extractor-args', 'youtube:player_client=android']);
-      if (result.status !== 0) {
-        throw new Error(result.stderr?.trim() || 'yt-dlp failed');
+    const runOnce = (extra = []) => new Promise((resolve, reject) => {
+      const child = spawn('yt-dlp', [...base, ...extra, ...args]);
+      let stdout = '';
+      let stderr = '';
+      let finished = false;
+      const onFinish = (err, result) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        if (err) return reject(err);
+        resolve(result);
+      };
+      const timer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch {}
+        onFinish(new Error('yt-dlp timed out'));
+      }, effectiveTimeout);
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data', (d) => { stdout += d; });
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data', (d) => { stderr += d; });
+      child.on('error', (e) => onFinish(e));
+      child.on('close', (code) => {
+        if (code !== 0) {
+          return onFinish(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
+        }
+        const text = (stdout || '').trim();
+        if (!text) return onFinish(new Error('yt-dlp produced no output'));
+        try {
+          const json = JSON.parse(text);
+          onFinish(null, json);
+        } catch (e) {
+          onFinish(new Error('Failed to parse yt-dlp JSON'));
+        }
+      });
+    });
+
+    // Try normal run, then fallback to Android extractor client
+    return runOnce().catch(() => runOnce(['--extractor-args', 'youtube:player_client=android']));
+  }
+
+  async _mapWithConcurrency(items, concurrency, mapper) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const results = new Array(items.length);
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (true) {
+        const currentIndex = nextIndex;
+        if (currentIndex >= items.length) return;
+        nextIndex += 1;
+        try {
+          results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+        } catch (e) {
+          results[currentIndex] = null;
+        }
       }
-    }
-    const text = result.stdout?.trim();
-    if (!text) throw new Error('yt-dlp produced no output');
-    return JSON.parse(text);
+    };
+
+    const workers = new Array(Math.min(concurrency, items.length)).fill(0).map(() => worker());
+    await Promise.all(workers);
+    return results;
   }
 
   _mapYtDlpEntryToTrack(entry) {
