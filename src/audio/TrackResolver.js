@@ -44,40 +44,69 @@ class TrackResolver {
   }
 
   async resolveYouTube(url) {
-    // yt-dlp first (most reliable)
+    // Try play-dl first for single tracks (typically faster)
+    const tStart = Date.now();
     try {
-      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', '--no-playlist', url]);
-      return this._mapYtDlpEntryToTrack(json);
+      const video = await playdl.video_info(url);
+      const details = video?.video_details;
+      console.log(`[Perf] play-dl resolved track in ${Date.now() - tStart}ms`);
+      return {
+        id: details?.id,
+        title: details?.title,
+        artist: details?.channel?.name,
+        duration: Math.floor(details?.durationInSec || 0),
+        url: details?.url || url,
+        thumbnail: details?.thumbnails?.[0]?.url,
+        source: 'youtube'
+      };
     } catch (e1) {
-      // Fallback to play-dl
+      // Fallback to yt-dlp (more reliable but slower)
+      console.log(`[Perf] play-dl failed after ${Date.now() - tStart}ms, trying yt-dlp`);
       try {
-        const video = await playdl.video_info(url);
-        const details = video?.video_details;
-        return {
-          id: details?.id,
-          title: details?.title,
-          artist: details?.channel?.name,
-          duration: Math.floor(details?.durationInSec || 0),
-          url: details?.url || url,
-          thumbnail: details?.thumbnails?.[0]?.url,
-          source: 'youtube'
-        };
+        const ytStart = Date.now();
+        const json = await this._ytDlpJsonAsync([
+          '-J', 
+          '--no-warnings', 
+          '--quiet', 
+          '--no-playlist',
+          '--socket-timeout', '5',
+          '--retries', '1',
+          url
+        ], { timeoutMs: 8000 });
+        console.log(`[Perf] yt-dlp resolved track in ${Date.now() - ytStart}ms`);
+        return this._mapYtDlpEntryToTrack(json);
       } catch (e2) {
-        console.error('Failed to resolve YouTube track via yt-dlp:', e1?.message || e1);
-        console.error('Failed to resolve YouTube track via play-dl:', e2?.message || e2);
+        console.error('Failed to resolve YouTube track via play-dl:', e1?.message || e1);
+        console.error('Failed to resolve YouTube track via yt-dlp:', e2?.message || e2);
         throw e2;
       }
     }
   }
 
   async resolveYouTubePlaylist(url) {
-    // yt-dlp first
+    // yt-dlp first - return basic info fast, let individual tracks resolve later
     try {
-      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', url]);
+      const json = await this._ytDlpJsonAsync([
+        '-J', 
+        '--no-warnings', 
+        '--quiet',
+        '--flat-playlist',  // Get playlist fast, resolve tracks individually later
+        url
+      ]);
       const entries = Array.isArray(json?.entries) ? json.entries : [];
       const limit = Number.parseInt(process.env.PLAYLIST_MAX || '100', 10);
       const limited = entries.slice(0, limit);
-      return limited.map((e) => this._mapYtDlpEntryToTrack(e)).filter(Boolean);
+      // Return minimal info - tracks will be resolved when played
+      return limited.map((e) => ({
+        id: e.id || e.url,
+        title: e.title || 'Unknown',
+        artist: e.uploader || e.channel || '',
+        duration: e.duration || 0,
+        url: e.url || (e.id ? `https://www.youtube.com/watch?v=${e.id}` : null),
+        thumbnail: null,
+        source: 'youtube',
+        needsResolve: true  // Flag for lazy resolution
+      })).filter(t => t.url);
     } catch (e1) {
       // Fallback to play-dl
       try {
@@ -118,20 +147,24 @@ class TrackResolver {
       if (data?.type === 'album' || data?.type === 'playlist') {
         const tracks = await getTracks(url);
         const limit = Number.parseInt(process.env.PLAYLIST_MAX || '100', 10);
-        const concurrency = Math.max(1, Number.parseInt(process.env.SPOTIFY_CONCURRENCY || '4', 10));
         const limited = tracks.slice(0, limit);
-        const mapper = async (t) => {
+        
+        // Return Spotify metadata immediately, resolve YouTube URLs lazily
+        return limited.map(t => {
           const name = t.name || t.title;
           const artist = (Array.isArray(t.artists) ? t.artists[0]?.name : t.artist) || '';
-          const q = `${name} ${artist}`.trim();
-          try {
-            return await this.searchYouTubeAsTrack(q);
-          } catch {
-            return null;
-          }
-        };
-        const mapped = await this._mapWithConcurrency(limited, concurrency, mapper);
-        return mapped.filter(Boolean);
+          return {
+            id: t.id,
+            title: name,
+            artist: artist,
+            duration: Math.floor((t.duration_ms || 0) / 1000),
+            url: null,  // Will be resolved when needed
+            thumbnail: t.album?.images?.[0]?.url || null,
+            source: 'spotify',
+            spotifyQuery: `${name} ${artist}`.trim(),  // Store query for lazy resolution
+            needsResolve: true
+          };
+        });
       }
       throw new Error('Unsupported Spotify URL');
     } catch (error) {
@@ -141,60 +174,59 @@ class TrackResolver {
   }
 
   async searchYouTube(query) {
-    // yt-dlp first
+    // Try play-dl first (faster for searches)
+    const tStart = Date.now();
     try {
-      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
-      const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
-      if (!entry) throw new Error('No results found');
-      const track = this._mapYtDlpEntryToTrack(entry);
-      if (!track?.url) throw new Error('Search result missing URL');
-      return track;
+      const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
+      if (!res || res.length === 0) throw new Error('No results found');
+      const candidate = res[0];
+      console.log(`[Perf] play-dl search completed in ${Date.now() - tStart}ms`);
+      
+      // Get full info for the found video
+      const url = candidate?.url || (candidate?.id ? `https://www.youtube.com/watch?v=${candidate.id}` : undefined);
+      if (!url) throw new Error('Search result missing URL');
+      
+      // Use the same method to get full track info
+      return await this.resolveYouTube(url);
     } catch (e1) {
-      // Fallback to play-dl
+      // Fallback to yt-dlp
+      console.log(`[Perf] play-dl search failed after ${Date.now() - tStart}ms, trying yt-dlp`);
       try {
-        const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-        if (!res || res.length === 0) throw new Error('No results found');
-        const candidate = res[0];
-        const url = candidate?.url || (candidate?.id ? `https://www.youtube.com/watch?v=${candidate.id}` : undefined);
-        if (!url) throw new Error('Search result missing URL');
-        return await this.resolveYouTube(url);
+        const ytStart = Date.now();
+        const json = await this._ytDlpJsonAsync([
+          '-J', 
+          '--no-warnings', 
+          '--quiet',
+          `ytsearch1:${query}`
+        ], { timeoutMs: 8000 });
+        const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
+        console.log(`[Perf] yt-dlp search completed in ${Date.now() - ytStart}ms`);
+        if (!entry) throw new Error('No results found');
+        const track = this._mapYtDlpEntryToTrack(entry);
+        if (!track?.url) throw new Error('Search result missing URL');
+        return track;
       } catch (e2) {
-        console.error('Failed to search YouTube via yt-dlp:', e1?.message || e1);
-        console.error('Failed to search YouTube via play-dl:', e2?.message || e2);
+        console.error('Failed to search YouTube via play-dl:', e1?.message || e1);
+        console.error('Failed to search YouTube via yt-dlp:', e2?.message || e2);
         throw e2;
       }
     }
   }
 
   async searchYouTubeAsTrack(query) {
-    // yt-dlp first
-    try {
-      const json = await this._ytDlpJsonAsync(['-J', '--no-warnings', '--quiet', `ytsearch1:${query}`]);
-      const entry = Array.isArray(json?.entries) ? json.entries[0] : json;
-      if (!entry) throw new Error('No results found');
-      return this._mapYtDlpEntryToTrack(entry);
-    } catch (e1) {
-      try {
-        const res = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-        if (!res || res.length === 0) throw new Error('No results found');
-        const url = res[0].url || (res[0].id ? `https://www.youtube.com/watch?v=${res[0].id}` : undefined);
-        if (!url) throw new Error('Search result missing URL');
-        return await this.resolveYouTube(url);
-      } catch (e2) {
-        console.error('Failed to search track via yt-dlp:', e1?.message || e1);
-        console.error('Failed to search track via play-dl:', e2?.message || e2);
-        throw e2;
-      }
-    }
+    // Use the same optimized search method
+    return this.searchYouTube(query);
   }
 
   _ytDlpJsonAsync(args, { timeoutMs } = {}) {
     const cookiesFile = process.env.YTDLP_COOKIES_FILE;
     const base = cookiesFile ? ['--cookies', cookiesFile] : [];
-    const effectiveTimeout = Number.parseInt(timeoutMs || process.env.YTDLP_TIMEOUT_MS || '15000', 10);
+    const effectiveTimeout = Number.parseInt(timeoutMs || process.env.YTDLP_TIMEOUT_MS || '10000', 10);
 
     const runOnce = (extra = []) => new Promise((resolve, reject) => {
-      const child = spawn('yt-dlp', [...base, ...extra, ...args]);
+      const child = spawn('yt-dlp', [...base, ...extra, ...args], {
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
       let stdout = '';
       let stderr = '';
       let finished = false;

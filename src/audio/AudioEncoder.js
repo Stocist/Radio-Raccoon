@@ -18,21 +18,24 @@ class AudioEncoder {
   createOpusStream(inputStream) {
     const ffmpeg = new prism.FFmpeg({
       args: [
-        "-analyzeduration", "0",
+        "-analyzeduration", "0",  // Skip duration analysis
+        "-probesize", "32",       // Minimal probe size for faster start
         "-loglevel", "0",
         "-i", "pipe:0",
         "-f", "s16le",
         "-ar", String(this.sampleRate),
-        "-ac", String(this.channels)
+        "-ac", String(this.channels),
+        "-b:a", `${this.bitrateKbps}k`,  // Ensure high bitrate
+        "-compression_level", "10" // Maximum compression quality
       ]
     });
 
     const opus = new prism.opus.Encoder({
       rate: this.sampleRate,
       channels: this.channels,
-      frameSize: 960,
-      application: 2049, // AUDIO
-      bitrate: this.bitrateKbps * 1000
+      frameSize: 960,  // Standard 20ms frame size for best quality
+      application: 2049, // AUDIO (optimized for music)
+      bitrate: this.bitrateKbps * 1000  // 256kbps for high quality
     });
 
     const pipeline = inputStream.pipe(ffmpeg).pipe(opus);

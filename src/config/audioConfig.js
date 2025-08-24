@@ -1,10 +1,10 @@
 const audioConfig = {
-    // Audio quality settings
-    defaultBitrate: 256,
-    maxBitrate: 384,
-    minBitrate: 96,
-    sampleRate: 48000,
-    channels: 2,
+    // Audio quality settings (prioritizing quality)
+    defaultBitrate: 256,  // High quality default
+    maxBitrate: 510,      // Maximum Opus supports
+    minBitrate: 128,      // Minimum for good music quality
+    sampleRate: 48000,    // Standard Discord sample rate
+    channels: 2,          // Stereo
     
     // Platform settings
     youtube: {

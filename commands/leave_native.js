@@ -3,7 +3,7 @@
 const { EmbedBuilder } = require("discord.js");
 
 module.exports = {
-  name: "leave",
+  name: "clanker-neck",
   description: "Disconnect the bot from the voice channel",
   permissions: "0x0000000000000800",
   options: [],

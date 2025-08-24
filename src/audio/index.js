@@ -7,6 +7,7 @@ const { QueueManager } = require("./QueueManager");
 const TrackResolver = require("./TrackResolver");
 const playdl = require("play-dl");
 const { spawn } = require("child_process");
+const { AudioPlayerStatus } = require("@discordjs/voice");
 
 function initializeAudio(client, options = {}) {
   const voice = new VoiceConnectionManager();
@@ -16,6 +17,27 @@ function initializeAudio(client, options = {}) {
   const resolver = new TrackResolver();
   const players = new Map();
   const current = new Map();
+  
+  // Auto-play next track when current ends
+  player.player.on('stateChange', async (oldState, newState) => {
+    if (newState.status === AudioPlayerStatus.Idle && oldState.status === AudioPlayerStatus.Playing) {
+      // Song ended, play next in queue
+      for (const [guildId, currentTrack] of current) {
+        const next = queues.nextTrack(guildId);
+        if (next) {
+          console.log(`[AutoPlay] Playing next track: ${next.title}`);
+          try {
+            await client.audio.playTrack(guildId, next);
+          } catch (err) {
+            console.error('[AutoPlay] Failed to play next track:', err);
+          }
+        } else {
+          console.log('[AutoPlay] Queue empty, stopping playback');
+          current.delete(guildId);
+        }
+      }
+    }
+  });
 
   // Optional: configure Spotify credentials for play-dl if provided
   (async () => {
@@ -87,6 +109,19 @@ function initializeAudio(client, options = {}) {
 
       player.subscribe(connection);
       players.set(guildId, player.player);
+      
+      // Resolve track if it's lazy-loaded (Spotify/playlist)
+      if (track.needsResolve && track.spotifyQuery) {
+        console.log(`[Perf] Lazy-resolving Spotify track: ${track.title}`);
+        const tResolveStart = typeof process.hrtime === 'function' && process.hrtime.bigint ? process.hrtime.bigint() : null;
+        const resolved = await resolver.searchYouTubeAsTrack(track.spotifyQuery);
+        Object.assign(track, resolved, { needsResolve: false });
+        if (tResolveStart) {
+          const tResolveEnd = process.hrtime.bigint();
+          const resolveMs = Number(tResolveEnd - tResolveStart) / 1e6;
+          console.log(`[Perf] Lazy resolution took: ${resolveMs.toFixed(1)} ms`);
+        }
+      }
 
       // Stream audio: yt-dlp first, play-dl fallback
       const isValidHttpUrl = (value) => {
@@ -107,20 +142,38 @@ function initializeAudio(client, options = {}) {
       }
 
       // Try yt-dlp piping into ffmpeg via stdin (most resilient)
+      const tStreamStart = typeof process.hrtime === 'function' && process.hrtime.bigint ? process.hrtime.bigint() : null;
       try {
-        const subprocess = spawn("yt-dlp", ["-o", "-", "-f", "bestaudio/best", "-r", "2M", urlToStream], {
+        const subprocess = spawn("yt-dlp", [
+          "-o", "-", 
+          "-f", "bestaudio[acodec=opus]/bestaudio/best",  // Prefer Opus, then best available
+          "--audio-quality", "0",  // Best audio quality
+          "--no-part",  // Don't use .part files
+          urlToStream
+        ], {
           stdio: ["ignore", "pipe", "ignore"]
         });
         const opusStream = encoder.createOpusStream(subprocess.stdout);
         player.play(opusStream);
         current.set(guildId, track);
+        if (tStreamStart) {
+          const tStreamReady = process.hrtime.bigint();
+          const startMs = Number(tStreamReady - tStreamStart) / 1e6;
+          console.log(`[Perf] Stream started via yt-dlp -> ffmpeg -> opus in ${startMs.toFixed(1)} ms`);
+        }
       } catch (e1) {
         // Fallback to play-dl
+        const tFallbackStart = typeof process.hrtime === 'function' && process.hrtime.bigint ? process.hrtime.bigint() : null;
         const info = await playdl.video_info(urlToStream);
         const { stream } = await playdl.stream_from_info(info, { quality: 2 });
         const opusStream = encoder.createOpusStream(stream);
         player.play(opusStream);
         current.set(guildId, track);
+        if (tFallbackStart) {
+          const tFallbackEnd = process.hrtime.bigint();
+          const fallbackMs = Number(tFallbackEnd - tFallbackStart) / 1e6;
+          console.log(`[Perf] Stream started via play-dl fallback in ${fallbackMs.toFixed(1)} ms`);
+        }
       }
     }
   };

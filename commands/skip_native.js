@@ -28,9 +28,24 @@ module.exports = {
         client.audio?.player?.stop();
         return interaction.reply({ content: "Queue empty. Stopped.", ephemeral: true });
       }
+      
+      // Show loading status if track needs resolution
+      if (next.needsResolve) {
+        await interaction.deferReply();
+        // Track will be resolved by playTrack automatically
+      }
+      
       await client.audio.playTrack(guildId, next);
-      const embed = new EmbedBuilder().setColor("#4d9fd6").setTitle("Skipped").setDescription(`Now playing: ${next.title}`);
-      return interaction.reply({ embeds: [embed] });
+      const embed = new EmbedBuilder()
+        .setColor("#4d9fd6")
+        .setTitle("Skipped")
+        .setDescription(`Now playing: ${next.title}`);
+      
+      if (interaction.deferred) {
+        return interaction.editReply({ embeds: [embed] });
+      } else {
+        return interaction.reply({ embeds: [embed] });
+      }
     } catch (e) {
       console.error("skip_native error:", e);
       return interaction.reply({ content: "Failed to skip.", ephemeral: true });

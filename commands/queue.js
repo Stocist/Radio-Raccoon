@@ -13,7 +13,12 @@ module.exports = {
       const now = client.audio?.current?.get(guildId);
       const queue = client.audio?.queues?.getQueue(guildId) || [];
 
-      const items = queue.map((t, i) => `${i + 1}. ${t.title || 'Unknown'}${t.duration ? ` (${Math.floor(t.duration/60)}:${String(t.duration%60).padStart(2,'0')})` : ''}`);
+      const items = queue.map((t, i) => {
+        const status = t.needsResolve ? '⏳' : '✓';
+        const duration = t.duration ? ` (${Math.floor(t.duration/60)}:${String(t.duration%60).padStart(2,'0')})` : '';
+        const source = t.source === 'spotify' ? ' [Spotify]' : '';
+        return `${i + 1}. ${status} ${t.title || 'Unknown'}${duration}${source}`;
+      });
       const pageSize = 10;
       const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
       let page = 1;
@@ -21,10 +26,11 @@ module.exports = {
       const render = () => {
         const start = (page - 1) * pageSize;
         const slice = items.slice(start, start + pageSize);
+        const nowStatus = now && now.needsResolve ? '⏳' : '✓';
         const desc = [
-          now ? `Now Playing: **${now.title || 'Unknown'}**` : 'Now Playing: **Nothing**',
+          now ? `Now Playing: ${now.needsResolve ? '' : nowStatus + ' '}**${now.title || 'Unknown'}**` : 'Now Playing: **Nothing**',
           '',
-          slice.length ? 'Up Next:' : 'Queue is empty.',
+          slice.length ? 'Up Next: (✓ = Ready, ⏳ = Loading)' : 'Queue is empty.',
           slice.join('\n')
         ].filter(Boolean).join('\n');
 
